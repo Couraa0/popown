@@ -1,6 +1,13 @@
 // popup.js - YouTube AI Companion Popup Logic
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Detect if running as a popup or side panel
+  const urlParams = new URLSearchParams(window.location.search);
+  const isSidePanel = urlParams.get('sidepanel') === 'true';
+  if (!isSidePanel) {
+    document.body.classList.add("is-popup");
+  }
+
   // Elements
   const tabs = document.querySelectorAll(".tab-btn");
   const tabPanels = document.querySelectorAll(".tab-panel");
@@ -65,7 +72,23 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // 3. YouTube Video Detection
+  // 3. YouTube Video Detection
   detectYouTubeVideo();
+
+  if (typeof chrome !== "undefined" && chrome.tabs) {
+    // Listen for tab activation (switching tabs)
+    chrome.tabs.onActivated.addListener(() => {
+      detectYouTubeVideo();
+    });
+
+    // Listen for tab updates (navigating to different pages/videos)
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      // Only trigger if the URL has changed and the tab is active
+      if (changeInfo.url && tab.active) {
+        detectYouTubeVideo();
+      }
+    });
+  }
 
   function detectYouTubeVideo() {
     if (typeof chrome !== "undefined" && chrome.tabs) {
@@ -75,22 +98,36 @@ document.addEventListener("DOMContentLoaded", () => {
           const videoId = extractVideoId(url);
           
           if (videoId) {
-            activeVideoId = videoId;
-            setConnectedState(videoId, tabs[0].title);
+            if (activeVideoId !== videoId) {
+              activeVideoId = videoId;
+              setConnectedState(videoId, tabs[0].title);
+              resetUI();
+            }
           } else {
-            setDisconnectedState("Buka video YouTube terlebih dahulu.");
+            if (activeVideoId !== null) {
+              activeVideoId = null;
+              setDisconnectedState("Buka video YouTube terlebih dahulu.");
+              resetUI();
+            }
           }
         } else {
-          setDisconnectedState("Tidak dapat mendeteksi tab aktif.");
+          if (activeVideoId !== null) {
+            activeVideoId = null;
+            setDisconnectedState("Tidak dapat mendeteksi tab aktif.");
+            resetUI();
+          }
         }
       });
     } else {
       // Mocking environment for development/testing outside Chrome extension environment
       const mockUrl = "https://www.youtube.com/watch?v=xlWhpXdOlTo";
       const videoId = extractVideoId(mockUrl);
-      activeVideoId = videoId;
-      setConnectedState(videoId, "Mock Video untuk Pengembangan");
-      console.log("Menjalankan di luar lingkungan Extension - Menggunakan mock video ID:", videoId);
+      if (activeVideoId !== videoId) {
+        activeVideoId = videoId;
+        setConnectedState(videoId, "Mock Video untuk Pengembangan");
+        resetUI();
+        console.log("Menjalankan di luar lingkungan Extension - Menggunakan mock video ID:", videoId);
+      }
     }
   }
 
@@ -121,6 +158,26 @@ document.addEventListener("DOMContentLoaded", () => {
     chatSendBtn.disabled = true;
     trackBrandsBtn.disabled = true;
     summarizeBtn.disabled = true;
+  }
+
+  function resetUI() {
+    // Reset Chat
+    chatHistory.innerHTML = `
+      <div class="chat-message system">
+        Hai! Saya asisten YouTube AI Anda. Silakan tanyakan apa saja mengenai isi video ini. Anda juga bisa menyuruh saya lompat ke menit tertentu (contoh: "ke menit 3:15" atau "ke adegan KFC").
+      </div>
+    `;
+    chatInput.value = "";
+    
+    // Reset Brand
+    brandList.className = "brand-list empty-state";
+    brandList.innerHTML = 'Klik tombol "Lacak Brand" di atas untuk menganalisis transkrip.';
+    brandSkeleton.classList.add("hidden");
+    
+    // Reset Summary
+    summaryContent.className = "summary-content empty-state";
+    summaryContent.innerHTML = 'Klik tombol "Buat Rangkuman" di atas untuk meringkas video.';
+    summarySkeleton.classList.add("hidden");
   }
 
   // 4. API Core Invoker
@@ -377,10 +434,17 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderMarkdown(mdText) {
     if (!mdText) return "";
     
-    let html = mdText;
+    // Preprocess escaped characters to avoid markdown formatting
+    let html = mdText
+      .replace(/\\\*/g, "★")
+      .replace(/\\#/g, "＃")
+      .replace(/\\_/g, "＿");
     
     // Fast lightweight markdown regex parser
-    // Headings (##, ###)
+    // Headings (h1 to h6)
+    html = html.replace(/^###### (.*$)/gim, "<h4>$1</h4>");
+    html = html.replace(/^##### (.*$)/gim, "<h4>$1</h4>");
+    html = html.replace(/^#### (.*$)/gim, "<h4>$1</h4>");
     html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
     html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
     html = html.replace(/^# (.*$)/gim, "<h2>$1</h2>");
@@ -511,6 +575,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (p.startsWith("<h") || p.startsWith("<ul") || p.startsWith("<ol") || p.startsWith("<li") || p.startsWith("<div") || p.startsWith("<hr")) return p;
       return `<p style='margin-bottom: 6px; line-height: 1.45;'>${p}</p>`;
     }).join("\n");
+
+    // Postprocess to restore escaped characters
+    html = html
+      .replace(/★/g, "*")
+      .replace(/＃/g, "#")
+      .replace(/＿/g, "_");
 
     return html;
   }

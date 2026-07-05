@@ -14,7 +14,7 @@ def get_llm():
         model=OLLAMA_MODEL,
         base_url=OLLAMA_BASE_URL,
         temperature=0.3,
-        num_predict=2048,
+        num_predict=4096,
         client_kwargs=client_kwargs,
     )
 

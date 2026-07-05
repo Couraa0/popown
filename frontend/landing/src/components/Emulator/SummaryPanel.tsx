@@ -19,110 +19,133 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
 }) => {
   const renderMessageText = (text: string) => {
     if (!text) return '';
-    const timeRegex = /\b(?:(\d+):)?(\d+):(\d+)\b/g;
     
-    const parts: (string | React.ReactNode)[] = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = timeRegex.exec(text)) !== null) {
-      const matchIndex = match.index;
-      
-      if (matchIndex > lastIndex) {
-        parts.push(text.slice(lastIndex, matchIndex));
-      }
-
-      const matchStr = match[0];
-      const hrs = match[1];
-      const mins = match[2];
-      const secs = match[3];
-      
-      let totalSeconds = 0;
-      if (hrs) {
-        totalSeconds = parseInt(hrs) * 3600 + parseInt(mins) * 60 + parseInt(secs);
-      } else {
-        totalSeconds = parseInt(mins) * 60 + parseInt(secs);
-      }
-
-      parts.push(
-        <button
-          key={`ts-${matchIndex}`}
-          className="timestamp-link"
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--accent)',
-            fontWeight: '600',
-            textDecoration: 'underline',
-            cursor: 'pointer',
-            padding: 0,
-            font: 'inherit'
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            seekTo(totalSeconds);
-          }}
-        >
-          {matchStr}
-        </button>
-      );
-
-      lastIndex = timeRegex.lastIndex;
-    }
-
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
-    }
-
-    const parseInlineStyles = (content: string): React.ReactNode => {
-      const boldRegex = /\*\*(.*?)\*\*/g;
-      
-      const parseItalic = (textStr: string): (string | React.ReactNode)[] => {
-        const italicParts: (string | React.ReactNode)[] = [];
-        let italicLastIndex = 0;
-        let italicMatch;
-        const styleRegex = /[\*_](.*?)[\*_]/g;
-        
-        while ((italicMatch = styleRegex.exec(textStr)) !== null) {
-          if (italicMatch.index > italicLastIndex) {
-            italicParts.push(textStr.slice(italicLastIndex, italicMatch.index));
-          }
-          italicParts.push(<em key={`em-${italicMatch.index}`}>{italicMatch[1]}</em>);
-          italicLastIndex = styleRegex.lastIndex;
-        }
-        if (italicLastIndex < textStr.length) {
-          italicParts.push(textStr.slice(italicLastIndex));
-        }
-        return italicParts;
-      };
-      
-      const parseBoldAndItalic = (textStr: string): React.ReactNode[] => {
-        const boldParts: React.ReactNode[] = [];
-        let boldLastIndex = 0;
-        let boldMatch;
-        
-        while ((boldMatch = boldRegex.exec(textStr)) !== null) {
-          if (boldMatch.index > boldLastIndex) {
-            const subStr = textStr.slice(boldLastIndex, boldMatch.index);
-            boldParts.push(...parseItalic(subStr));
-          }
-          boldParts.push(<strong key={`strong-${boldMatch.index}`}>{parseItalic(boldMatch[1])}</strong>);
-          boldLastIndex = boldRegex.lastIndex;
-        }
-        if (boldLastIndex < textStr.length) {
-          boldParts.push(...parseItalic(textStr.slice(boldLastIndex)));
-        }
-        return boldParts;
-      };
-      
-      return <>{parseBoldAndItalic(content)}</>;
+    const postProcess = (str: string) => {
+      return str.replace(/★/g, '*').replace(/＃/g, '#').replace(/＿/g, '_');
     };
 
-    return parts.map((part, i) => {
-      if (typeof part === 'string') {
-        return <span key={i}>{parseInlineStyles(part)}</span>;
+    const segments = text.split(/<br\s*\/?>/gi);
+    
+    return segments.map((rawSegment, segIdx) => {
+      const segment = rawSegment
+        .replace(/\\\*/g, '★')
+        .replace(/\\#/g, '＃')
+        .replace(/\\_/g, '＿');
+
+      const timeRegex = /\b(?:(\d+):)?(\d+):(\d+)\b/g;
+      const parts: (string | React.ReactNode)[] = [];
+      let lastIndex = 0;
+      let match;
+
+      while ((match = timeRegex.exec(segment)) !== null) {
+        const matchIndex = match.index;
+        
+        if (matchIndex > lastIndex) {
+          parts.push(segment.slice(lastIndex, matchIndex));
+        }
+
+        const matchStr = match[0];
+        const hrs = match[1];
+        const mins = match[2];
+        const secs = match[3];
+        
+        let totalSeconds = 0;
+        if (hrs) {
+          totalSeconds = parseInt(hrs) * 3600 + parseInt(mins) * 60 + parseInt(secs);
+        } else {
+          totalSeconds = parseInt(mins) * 60 + parseInt(secs);
+        }
+
+        parts.push(
+          <button
+            key={`ts-${matchIndex}`}
+            className="timestamp-link"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent)',
+              fontWeight: '600',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              padding: 0,
+              font: 'inherit'
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              seekTo(totalSeconds);
+            }}
+          >
+            {matchStr}
+          </button>
+        );
+
+        lastIndex = timeRegex.lastIndex;
       }
-      return part;
+
+      if (lastIndex < segment.length) {
+        parts.push(segment.slice(lastIndex));
+      }
+
+      const parseInlineStyles = (content: string): React.ReactNode => {
+        const boldRegex = /\*\*(.*?)\*\*/g;
+        
+        const parseItalic = (textStr: string): (string | React.ReactNode)[] => {
+          const italicParts: (string | React.ReactNode)[] = [];
+          let italicLastIndex = 0;
+          let italicMatch;
+          const styleRegex = /[\*_](.*?)[\*_]/g;
+          
+          while ((italicMatch = styleRegex.exec(textStr)) !== null) {
+            if (italicMatch.index > italicLastIndex) {
+              italicParts.push(postProcess(textStr.slice(italicLastIndex, italicMatch.index)));
+            }
+            italicParts.push(<em key={`em-${italicMatch.index}`}>{postProcess(italicMatch[1])}</em>);
+            italicLastIndex = styleRegex.lastIndex;
+          }
+          if (italicLastIndex < textStr.length) {
+            italicParts.push(postProcess(textStr.slice(italicLastIndex)));
+          }
+          return italicParts;
+        };
+        
+        const parseBoldAndItalic = (textStr: string): React.ReactNode[] => {
+          const boldParts: React.ReactNode[] = [];
+          let boldLastIndex = 0;
+          let boldMatch;
+          
+          while ((boldMatch = boldRegex.exec(textStr)) !== null) {
+            if (boldMatch.index > boldLastIndex) {
+              const subStr = textStr.slice(boldLastIndex, boldMatch.index);
+              boldParts.push(...parseItalic(subStr));
+            }
+            boldParts.push(<strong key={`strong-${boldMatch.index}`}>{parseItalic(boldMatch[1])}</strong>);
+            boldLastIndex = boldRegex.lastIndex;
+          }
+          if (boldLastIndex < textStr.length) {
+            boldParts.push(...parseItalic(textStr.slice(boldLastIndex)));
+          }
+          return boldParts;
+        };
+        
+        return <>{parseBoldAndItalic(content)}</>;
+      };
+
+      const renderedSegment = parts.map((part, i) => {
+        if (typeof part === 'string') {
+          return <span key={i}>{parseInlineStyles(part)}</span>;
+        }
+        return part;
+      });
+
+      if (segIdx < segments.length - 1) {
+        return (
+          <React.Fragment key={segIdx}>
+            {renderedSegment}
+            <br />
+          </React.Fragment>
+        );
+      }
+      return <React.Fragment key={segIdx}>{renderedSegment}</React.Fragment>;
     });
   };
 
@@ -193,7 +216,12 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
     };
 
     lines.forEach((line, idx) => {
-      const cleanLine = line.trim();
+      const preprocessedLine = line
+        .replace(/\\\*/g, '★')
+        .replace(/\\#/g, '＃')
+        .replace(/\\_/g, '＿');
+      const cleanLine = preprocessedLine.trim();
+
       if (!cleanLine) {
         flushList(`list-end-${idx}`);
         flushTable(`table-end-${idx}`);
@@ -234,12 +262,19 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
         } else {
           flushList(`list-notlist-${idx}`);
 
-          if (cleanLine.startsWith('### ')) {
-            elements.push(<h3 key={idx}>{renderMessageText(cleanLine.substring(4))}</h3>);
-          } else if (cleanLine.startsWith('## ')) {
-            elements.push(<h2 key={idx}>{renderMessageText(cleanLine.substring(3))}</h2>);
-          } else if (cleanLine.startsWith('# ')) {
-            elements.push(<h2 key={idx}>{renderMessageText(cleanLine.substring(2))}</h2>);
+          // Match headings (h1 to h6)
+          const headingMatch = cleanLine.match(/^(#{1,6})\s+(.*)$/);
+          if (headingMatch) {
+            const level = headingMatch[1].length;
+            const content = headingMatch[2];
+            const Tag = level === 1 || level === 2 ? 'h2' : (level === 3 ? 'h3' : 'h4');
+            elements.push(
+              React.createElement(
+                Tag,
+                { key: idx },
+                renderMessageText(content)
+              )
+            );
           } else {
             elements.push(<p key={idx} style={{ marginBottom: '8px', lineHeight: '1.5' }}>{renderMessageText(cleanLine)}</p>);
           }

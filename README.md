@@ -49,7 +49,7 @@ popown/
    - **Windows (PowerShell)**:
      ```powershell
      py -m venv venv
-     .\venv\Scripts\activate
+     .\venv\Scripts\activate 
      ```
    - **Linux/macOS**:
      ```bash
