@@ -45,6 +45,16 @@ def get_transcript(
         if os.path.exists(cookies_file):
             cookies = cookies_file
 
+    # Copy to /tmp to avoid Read-only file system error in serverless environments (Vercel)
+    if cookies and os.path.exists(cookies) and cookies != "/tmp/yt-cookies.txt":
+        try:
+            import shutil
+            tmp_cookies = "/tmp/yt-cookies.txt"
+            shutil.copy2(cookies, tmp_cookies)
+            cookies = tmp_cookies
+        except Exception:
+            pass
+
     key = _cache_key(video_id, languages)
     cached = _cache.get(key)
     if cached is not None:
@@ -130,7 +140,6 @@ def _try_ytdlp_captions(
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": False,
-        "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
     }
     cookies_jar = None
     if cookies and os.path.exists(cookies):

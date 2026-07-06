@@ -47,11 +47,23 @@ def read_root():
 def health():
     import os
     import traceback
+    import shutil
     
     current_dir = os.path.dirname(os.path.abspath(__file__))
     cookies_file = os.path.join(current_dir, "yt-cookies.txt")
     exists = os.path.exists(cookies_file)
     size = os.path.getsize(cookies_file) if exists else -1
+    
+    # Copy cookies to /tmp to avoid Read-only file system error when yt-dlp tries to save/update it
+    tmp_cookies = "/tmp/yt-cookies.txt"
+    if exists:
+        try:
+            shutil.copy2(cookies_file, tmp_cookies)
+            cookies_to_use = tmp_cookies
+        except Exception as e:
+            cookies_to_use = cookies_file
+    else:
+        cookies_to_use = None
 
     from utils.transcript import _try_youtube_transcript_api
     
@@ -64,7 +76,7 @@ def health():
     
     # 1. Test youtube-transcript-api
     try:
-        res = _try_youtube_transcript_api("xlWhpXdOlTo", ["en", "id"], cookies_file if exists else None)
+        res = _try_youtube_transcript_api("xlWhpXdOlTo", ["en", "id"], cookies_to_use)
         if res:
             yt_api_res = f"success: {len(res)} lines"
         else:
@@ -77,15 +89,15 @@ def health():
     try:
         import yt_dlp
         url = "https://www.youtube.com/watch?v=xlWhpXdOlTo"
+        # Remove android_vr to let yt-dlp try standard clients like iOS/web
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "extract_flat": False,
-            "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
         }
-        if exists:
-            ydl_opts["cookiefile"] = cookies_file
+        if cookies_to_use:
+            ydl_opts["cookiefile"] = cookies_to_use
             
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -118,7 +130,8 @@ def health():
             "resolved_path": cookies_file,
             "exists": exists,
             "size": size,
-            "cwd": os.getcwd()
+            "cwd": os.getcwd(),
+            "copied_to_tmp": os.path.exists(tmp_cookies)
         },
         "diagnostics": {
             "youtube_transcript_api": {"result": yt_api_res, "error": yt_api_error},
@@ -126,6 +139,7 @@ def health():
             "google_api": {"result": google_api_res, "error": google_api_error}
         }
     }
+
 
 
 
