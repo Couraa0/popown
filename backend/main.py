@@ -47,23 +47,71 @@ def read_root():
 def health():
     import os
     import traceback
-    from utils.transcript import get_transcript
     
     current_dir = os.path.dirname(os.path.abspath(__file__))
     cookies_file = os.path.join(current_dir, "yt-cookies.txt")
     exists = os.path.exists(cookies_file)
     size = os.path.getsize(cookies_file) if exists else -1
+
+    from utils.transcript import _try_youtube_transcript_api
     
-    test_result = "not run"
-    error_trace = ""
+    yt_api_res = "not run"
+    yt_api_error = ""
+    ytdlp_res = "not run"
+    ytdlp_error = ""
+    google_api_res = "not run"
+    google_api_error = ""
     
+    # 1. Test youtube-transcript-api
     try:
-        res = get_transcript("xlWhpXdOlTo", languages=["en", "id"])
-        test_result = f"success: {len(res)} entries fetched"
+        res = _try_youtube_transcript_api("xlWhpXdOlTo", ["en", "id"], cookies_file if exists else None)
+        if res:
+            yt_api_res = f"success: {len(res)} lines"
+        else:
+            yt_api_res = "failed: returned None"
     except Exception as e:
-        test_result = f"error: {str(e)}"
-        error_trace = traceback.format_exc()
+        yt_api_res = "error"
+        yt_api_error = f"{str(e)}\n{traceback.format_exc()}"
         
+    # 2. Test yt-dlp
+    try:
+        import yt_dlp
+        url = "https://www.youtube.com/watch?v=xlWhpXdOlTo"
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "extract_flat": False,
+            "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
+        }
+        if exists:
+            ydl_opts["cookiefile"] = cookies_file
+            
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        subtitles = info.get("subtitles", {}) or {}
+        auto_captions = info.get("automatic_captions", {}) or {}
+        ytdlp_res = f"success: extracted subtitles={list(subtitles.keys())}, auto={list(auto_captions.keys())}"
+    except Exception as e:
+        ytdlp_res = "error"
+        ytdlp_error = f"{str(e)}\n{traceback.format_exc()}"
+
+    # 3. Test Google API
+    try:
+        from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN
+        from utils.youtube_api import get_transcript_from_youtube_api
+        if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET or not YOUTUBE_REFRESH_TOKEN:
+            google_api_res = "skipped: credentials missing in config"
+        else:
+            res = get_transcript_from_youtube_api("xlWhpXdOlTo", "id", YOUTUBE_REFRESH_TOKEN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
+            if res:
+                google_api_res = f"success: {len(res)} lines"
+            else:
+                google_api_res = "failed: returned None"
+    except Exception as e:
+        google_api_res = "error"
+        google_api_error = f"{str(e)}\n{traceback.format_exc()}"
+
     return {
         "status": "ok",
         "cookies": {
@@ -72,11 +120,13 @@ def health():
             "size": size,
             "cwd": os.getcwd()
         },
-        "diagnostic_fetch": {
-            "result": test_result,
-            "traceback": error_trace
+        "diagnostics": {
+            "youtube_transcript_api": {"result": yt_api_res, "error": yt_api_error},
+            "yt_dlp": {"result": ytdlp_res, "error": ytdlp_error},
+            "google_api": {"result": google_api_res, "error": google_api_error}
         }
     }
+
 
 
 
